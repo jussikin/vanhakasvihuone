@@ -6,6 +6,8 @@
 #include <Ticker.h>
 
 #define MOVEMENT_PIN D4
+#define WATERCOUNTER_PIN D5
+
 #define TIMOUT 160
 #define SKIPS 10
 #define DIRA_PIN D8
@@ -20,6 +22,11 @@ PubSubClient client(espClient);
 Ticker sekuntiTikuttaja;
 int secudejaJaSusia = 0;
 int skip =0;
+int flowticks =0;
+
+void ICACHE_RAM_ATTR flowup(){
+  flowticks++;
+}
 
 void tickUp(){
   secudejaJaSusia++;
@@ -28,18 +35,40 @@ void tickUp(){
   }
 }
 
+void stop(){
+  digitalWrite(DIRA_PIN,LOW);
+  digitalWrite(DIRB_PIN,LOW);
+}
 
+void setDirA(){
+  digitalWrite(DIRB_PIN,HIGH);
+  digitalWrite(DIRA_PIN,LOW);
+}
+
+void setDirB(){
+  digitalWrite(DIRB_PIN,LOW);
+  digitalWrite(DIRA_PIN,HIGH);
+}
 
 char payloadArray[20];
 void sendStatus(){
    status.toCharArray(payloadArray, 20);
    client.publish(WINDOWWANHA,payloadArray);
+   String empty="";
+   empty += flowticks;
+   client.publish(WATERWANHA,empty.c_str());
+   if(digitalRead(MOVEMENT_PIN)){
+     client.publish(OVERFLOWTOPIC,"1");
+   } else {
+     client.publish(OVERFLOWTOPIC,"0");
+   }
+
 }
 
 void callback(char* topic, byte* payload, unsigned int length) {
  secudejaJaSusia=0;
- if(topic==COMMANDWANHA){
-   if(payload[0]=1 && (status=="undefined" || status=="closed")){
+ if(strcmp(topic,COMMANDWANHA)==0){
+   if(payload[0]=='1' && (status=="undefined" || status=="closed")){
      status="opening";
      sendStatus();
      setDirA();
@@ -49,7 +78,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
      stop();
    }
 
-   if(payload[0]=0 && (status=="undefined" || status=="open")){
+   if(payload[0]=='0' && (status=="undefined" || status=="open")){
      status="closing";
      sendStatus();
      setDirB();
@@ -71,27 +100,14 @@ void setupWifi(){
     client.setCallback(callback);
 }
 
-void stop(){
-  digitalWrite(DIRA_PIN,LOW);
-  digitalWrite(DIRB_PIN,LOW);
-}
-
-void setDirA(){
-  digitalWrite(DIRB_PIN,HIGH);
-  digitalWrite(DIRA_PIN,LOW);
-}
-
-void setDirB(){
-  digitalWrite(DIRB_PIN,LOW);
-  digitalWrite(DIRA_PIN,HIGH);
-}
-
-
 void setup() {
     sekuntiTikuttaja.attach(1,tickUp);
     setupWifi();
     pinMode(DIRA_PIN,OUTPUT);
     pinMode(DIRB_PIN,OUTPUT);
+    pinMode(MOVEMENT_PIN,INPUT_PULLUP);
+    pinMode(WATERCOUNTER_PIN, INPUT);
+    attachInterrupt(digitalPinToInterrupt(WATERCOUNTER_PIN),flowup,FALLING);
 }
 
 
